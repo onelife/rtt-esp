@@ -1,0 +1,7 @@
+[submodule "esp-idf"]
+    path = esp-idf
+    url = https://github.com/espressif/esp-idf.git
+
+[submodule "crosstool-NG"]
+    path = crosstool-NG
+    url = https://github.com/espressif/crosstool-NG.git

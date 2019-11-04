@@ -1,0 +1,16 @@
+version: '3'
+services:
+  compiler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ROOT_PASSWORD: ${ROOT_PASSWORD}
+        USER_PASSWORD: ${USER_PASSWORD}
+    container_name: rtt-esp
+    environment:
+      PYTHONPATH: /home/rtt
+    volumes:
+      - /home/docker/rtt-esp:/home/rtt/rtt-esp
+    stdin_open: true
+    tty: true

@@ -11,6 +11,8 @@ services:
     environment:
       PYTHONPATH: /home/rtt
     volumes:
-      - /home/docker/rtt-esp:/home/rtt/rtt-esp
+      - /home/docker/rtt-esp:/home/rtt/rtt
+    entrypoint:
+      - bash
     stdin_open: true
     tty: true

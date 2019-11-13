@@ -64,6 +64,7 @@ ARG IDF_CHECKOUT_REF=
 
 ENV IDF_PATH=/home/rtt/esp/idf
 ENV IDF_TOOLS_PATH=/home/rtt/esp
+ENV RTT_PATH=/home/rtt/rtt
 
 RUN echo IDF_CHECKOUT_REF=$IDF_CHECKOUT_REF IDF_CLONE_BRANCH_OR_TAG=$IDF_CLONE_BRANCH_OR_TAG && \
     git clone --recursive \
@@ -76,7 +77,8 @@ RUN echo IDF_CHECKOUT_REF=$IDF_CHECKOUT_REF IDF_CLONE_BRANCH_OR_TAG=$IDF_CLONE_B
     fi
 
 RUN $IDF_PATH/install.sh && \
-  rm -rf $IDF_TOOLS_PATH/dist
+  rm -rf $IDF_TOOLS_PATH/dist \
+  rm -rf $IDF_PATH/components/freertos
 
 COPY entrypoint.sh /home/rtt/esp/entrypoint.sh
 

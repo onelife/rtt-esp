@@ -9,6 +9,8 @@ services:
         USER_PASSWORD: ${USER_PASSWORD}
     container_name: rtt-esp
     environment:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
       PYTHONPATH: /home/rtt
     volumes:
       - /home/docker/rtt-esp:/home/rtt/rtt

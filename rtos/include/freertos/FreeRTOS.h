@@ -960,6 +960,7 @@ typedef struct xSTATIC_TCB
  * users will recognise that it would be unwise to make direct use of the
  * structure members.
  */
+#if 0
 typedef struct xSTATIC_QUEUE
 {
 	void *pvDummy1[ 3 ];
@@ -990,6 +991,7 @@ typedef struct xSTATIC_QUEUE
 
 } StaticQueue_t;
 typedef StaticQueue_t StaticSemaphore_t;
+#endif
 
 /*
  * In line with software engineering best practice, especially when supplying a

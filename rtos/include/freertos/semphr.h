@@ -75,13 +75,13 @@
 #endif
 
 #include "queue.h"
-
+#if 0
 typedef QueueHandle_t SemaphoreHandle_t;
-
+#endif
 #define semBINARY_SEMAPHORE_QUEUE_LENGTH	( ( uint8_t ) 1U )
 #define semSEMAPHORE_QUEUE_ITEM_LENGTH		( ( uint8_t ) 0U )
 #define semGIVE_BLOCK_TIME					( ( TickType_t ) 0U )
-
+#if 0
 /** @cond */
 /**
  * This old vSemaphoreCreateBinary() macro is now deprecated in favour of the
@@ -1112,7 +1112,7 @@ typedef QueueHandle_t SemaphoreHandle_t;
  *
  */
 #define uxSemaphoreGetCount( xSemaphore ) uxQueueMessagesWaiting( ( QueueHandle_t ) ( xSemaphore ) )
-
+#endif
 #endif /* SEMAPHORE_H */
 
 

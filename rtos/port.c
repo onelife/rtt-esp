@@ -279,7 +279,7 @@ BaseType_t xPortStartScheduler( void )
 	return pdTRUE;
 }
 /*-----------------------------------------------------------*/
-
+#if 0
 BaseType_t xPortSysTickHandler( void )
 {
 	BaseType_t ret;
@@ -295,7 +295,7 @@ BaseType_t xPortSysTickHandler( void )
 	}
 	return ret;
 }
-
+#endif
 
 void vPortYieldOtherCore( BaseType_t coreid ) {
 	esp_crosscore_int_send_yield( coreid );

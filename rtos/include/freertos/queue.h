@@ -78,15 +78,14 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-
+#if 0
 /**
  * Type by which queues are referenced.  For example, a call to xQueueCreate()
  * returns an QueueHandle_t variable that can then be used as a parameter to
  * xQueueSend(), xQueueReceive(), etc.
  */
 typedef void * QueueHandle_t;
-
+#endif
 /**
  * Type by which queue sets are referenced.  For example, a call to
  * xQueueCreateSet() returns an xQueueSet variable that can then be used as a
@@ -117,6 +116,9 @@ typedef void * QueueSetMemberHandle_t;
 
 /** @endcond */
 
+#include "../rtt_port.h"
+
+#if 0
 /**
  * Creates a new queue instance.  This allocates the storage required by the
  * new queue and returns a handle for the queue.
@@ -1639,6 +1641,7 @@ void vQueueSetQueueNumber( QueueHandle_t xQueue, UBaseType_t uxQueueNumber ) PRI
 UBaseType_t uxQueueGetQueueNumber( QueueHandle_t xQueue ) PRIVILEGED_FUNCTION;
 uint8_t ucQueueGetQueueType( QueueHandle_t xQueue ) PRIVILEGED_FUNCTION;
 /** @endcond */
+#endif
 
 #ifdef __cplusplus
 }

@@ -80,7 +80,8 @@ RUN $IDF_PATH/install.sh && \
   rm -rf $IDF_TOOLS_PATH/dist \
   rm -rf $IDF_PATH/components/freertos
 
-COPY entrypoint.sh /home/rtt/esp/entrypoint.sh
+COPY --chown=rtt entrypoint.sh /home/rtt/esp/entrypoint.sh
+RUN chmod u+x /home/rtt/esp/entrypoint.sh
 
 ENTRYPOINT [ "/home/rtt/esp/entrypoint.sh" ]
 CMD [ "/bin/bash" ]

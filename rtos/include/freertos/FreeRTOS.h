@@ -94,9 +94,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+/* for likely and unlikely */
+#include "esp_compiler.h"
 
 /* Application specific configuration options. */
-#include "FreeRTOSConfig.h"
+#include "freertos/FreeRTOSConfig.h"
 
 /* Basic FreeRTOS definitions. */
 #include "projdefs.h"
@@ -945,7 +947,7 @@ typedef struct xSTATIC_TCB
 	#endif
 
 } StaticTask_t;
-
+#if 0
 /*
  * In line with software engineering best practice, especially when supplying a
  * library that is likely to change in future versions, FreeRTOS implements a
@@ -960,7 +962,6 @@ typedef struct xSTATIC_TCB
  * users will recognise that it would be unwise to make direct use of the
  * structure members.
  */
-#if 0
 typedef struct xSTATIC_QUEUE
 {
 	void *pvDummy1[ 3 ];
@@ -992,7 +993,6 @@ typedef struct xSTATIC_QUEUE
 } StaticQueue_t;
 typedef StaticQueue_t StaticSemaphore_t;
 #endif
-
 /*
  * In line with software engineering best practice, especially when supplying a
  * library that is likely to change in future versions, FreeRTOS implements a

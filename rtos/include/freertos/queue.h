@@ -85,7 +85,7 @@ extern "C" {
  * xQueueSend(), xQueueReceive(), etc.
  */
 typedef void * QueueHandle_t;
-#endif
+
 /**
  * Type by which queue sets are referenced.  For example, a call to
  * xQueueCreateSet() returns an xQueueSet variable that can then be used as a
@@ -99,6 +99,7 @@ typedef void * QueueSetHandle_t;
  * return value can be either an QueueHandle_t or an SemaphoreHandle_t.
  */
 typedef void * QueueSetMemberHandle_t;
+#endif
 
 /** @cond */
 /* For internal use only. */

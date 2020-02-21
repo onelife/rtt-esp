@@ -13,7 +13,7 @@ services:
       LANG: C.UTF-8
       PYTHONPATH: /home/rtt
     volumes:
-      - /home/docker/rtt-esp:/home/rtt/rtt
+      - ../../:/home/rtt/rtt
     entrypoint:
       - bash
     stdin_open: true

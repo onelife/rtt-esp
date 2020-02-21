@@ -72,6 +72,10 @@
 
 #include "sdkconfig.h"
 
+/* enable use of optimized task selection by the scheduler */
+#ifdef CONFIG_FREERTOS_OPTIMIZED_SCHEDULER
+#define configUSE_PORT_OPTIMISED_TASK_SELECTION 1
+#endif
 
 /* ESP31 and ESP32 are dualcore processors. */
 #ifndef CONFIG_FREERTOS_UNICORE
@@ -111,27 +115,26 @@ int xt_clock_freq(void) __attribute__((deprecated));
 
 
 /* Required for configuration-dependent settings */
-#include "xtensa_config.h"
-
+#include <freertos/xtensa_config.h>
 
 /* configASSERT behaviour */
 #ifndef __ASSEMBLER__
 #include <stdlib.h> /* for abort() */
 #if CONFIG_IDF_TARGET_ESP32
 #include "esp32/rom/ets_sys.h"
-#elif CONFIG_IDF_TARGET_ESP32S2BETA
-#include "esp32s2beta/rom/ets_sys.h"
+#elif CONFIG_IDF_TARGET_ESP32S2
+#include "esp32s2/rom/ets_sys.h"
 #endif
 
 #if defined(CONFIG_FREERTOS_ASSERT_DISABLE)
 #define configASSERT(a) /* assertions disabled */
 #elif defined(CONFIG_FREERTOS_ASSERT_FAIL_PRINT_CONTINUE)
-#define configASSERT(a) if (!(a)) {                                     \
+#define configASSERT(a) if (unlikely(!(a))) {                                     \
         ets_printf("%s:%d (%s)- assert failed!\n", __FILE__, __LINE__,  \
                    __FUNCTION__);                                       \
     }
 #else /* CONFIG_FREERTOS_ASSERT_FAIL_ABORT */
-#define configASSERT(a) if (!(a)) {                                     \
+#define configASSERT(a) if (unlikely(!(a))) {                                     \
         ets_printf("%s:%d (%s)- assert failed!\n", __FILE__, __LINE__,  \
                    __FUNCTION__);                                       \
         abort();                                                        \
@@ -178,7 +181,7 @@ int xt_clock_freq(void) __attribute__((deprecated));
 #define configMAX_PRIORITIES			( 25 )
 #endif
 
-#ifndef CONFIG_ESP32_APPTRACE_ENABLE
+#ifndef CONFIG_APPTRACE_ENABLE
 #define configMINIMAL_STACK_SIZE		768
 #else
 /* apptrace module requires at least 2KB of stack per task */

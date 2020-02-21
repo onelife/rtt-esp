@@ -1,6 +1,10 @@
 
 #include "rtthread.h"
 
+// TODO:
+#define vQueueWaitForMessageRestricted(a, b)
+
+
 enum ipc_type {
     RTT_MUTEX,
     RTT_SEMAPHORE,
@@ -14,17 +18,34 @@ union ipc_union {
 };
 
 struct ipc_wrap {
-    enum ipc_type typ;
+    enum ipc_type type;
     unsigned int maxCnt;
-    union ipc_union mem;
+    struct ipc_qset *cntr;
+    union ipc_union member;
 };
+
+struct ipc_qset {
+    unsigned int length;
+    rt_slist_t member;
+};
+
+// struct ipc_qset_item {
+//     struct ipc_wrap item;
+// };
+
 
 typedef struct ipc_wrap generic_ipc_t;
 typedef struct ipc_wrap * generic_handle_t;
 
-typedef generic_handle_t SemaphoreHandle_t;
-typedef generic_ipc_t StaticSemaphore_t;
-typedef generic_handle_t QueueHandle_t;
+typedef struct ipc_wrap StaticSemaphore_t;
+typedef struct ipc_wrap * SemaphoreHandle_t;
+typedef struct ipc_wrap * QueueHandle_t;
+
+typedef struct ipc_qset QueueSet_t;
+typedef struct ipc_qset * QueueSetHandle_t;
+typedef struct ipc_wrap QueueSetMember_t;
+typedef struct ipc_wrap * QueueSetMemberHandle_t;
+
 
 SemaphoreHandle_t wrap_mutex_create(const char *name);
 SemaphoreHandle_t wrap_bin_sem_create(const char *name,
@@ -47,7 +68,7 @@ QueueHandle_t wrap_mq_create(const char *name, const UBaseType_t uxQueueLength,
     const UBaseType_t uxItemSize);
 BaseType_t wrap_mq_reset(QueueHandle_t handle);
 BaseType_t wrap_mq_send(QueueHandle_t handle, const void * const item,
-    TickType_t ticks);
+    TickType_t ticks, uint8_t is_urgent);
 BaseType_t wrap_mq_send_in_isr(QueueHandle_t handle, const void * const item,
     BaseType_t * const pxHigherPriorityTaskWoken);
 BaseType_t wrap_mq_recv(QueueHandle_t handle, void * const buffer,
@@ -57,13 +78,39 @@ BaseType_t wrap_mq_recv_in_isr(QueueHandle_t handle, void * const buffer,
 BaseType_t wrap_mq1_replace_in_isr(QueueHandle_t handle,
     const void * const item, BaseType_t * const pxHigherPriorityTaskWoken);
 void wrap_mq_delete(QueueHandle_t handle);
+UBaseType_t wrap_mq_entries(const QueueHandle_t handle);
+BaseType_t wrap_mq_is_full(const QueueHandle_t handle);
 
-BaseType_t xQueueAddToSet( QueueSetMemberHandle_t xQueueOrSemaphore, QueueSetHandle_t xQueueSet );
-BaseType_t xQueueRemoveFromSet( QueueSetMemberHandle_t xQueueOrSemaphore, QueueSetHandle_t xQueueSet );
+QueueSetHandle_t wrap_qset_create(const UBaseType_t length);
+BaseType_t wrap_qset_add(QueueSetMemberHandle_t qOrSem_handle,
+    QueueSetHandle_t handle);
+BaseType_t wrap_qset_remove(QueueSetMemberHandle_t qOrSem_handle,
+    QueueSetHandle_t handle);
+// QueueSetHandle_t xQueueCreateSet( const UBaseType_t uxEventQueueLength ) 
+
 
 #define TO_STRING(a)                    # a
 #define CONCATE(a, b)                   TO_STRING(a ## b)
 #define APPEND_COUNTER(name)            CONCATE(name, __COUNTER__)
+
+
+#define xQueueSendToBack( xQueue, pvItemToQueue, xTicksToWait ) (0)
+#define xQueueSendToBackFromISR( xQueue, pvItemToQueue, pxHigherPriorityTaskWoken ) (0)
+#define uxSemaphoreGetCount( xSemaphore ) (0)
+#define uxQueueSpacesAvailable( xQueue ) (4)
+
+#define xQueueGenericSend(handle, item, ticks, pos) \
+    ((queueSEND_TO_BACK == pos) ? wrap_mq_send((handle), (item), (ticks), 0) : \
+    ((queueSEND_TO_FRONT == pos) ? wrap_mq_send((handle), (item), (ticks), 1) : pdFAIL))
+
+#define xSemaphoreCreateRecursiveMutex() \
+    wrap_mutex_create(APPEND_COUNTER(rMutD_))
+
+#define xSemaphoreTakeRecursive(handle, ticks) \
+    wrap_ipc_take((handle), (ticks))
+
+#define xSemaphoreGiveRecursive(handle) \
+    wrap_ipc_give((handle))
 
 #define xSemaphoreCreateMutex()         \
     wrap_mutex_create(APPEND_COUNTER(mutD_))
@@ -85,7 +132,7 @@ BaseType_t xQueueRemoveFromSet( QueueSetMemberHandle_t xQueueOrSemaphore, QueueS
 
 #define xSemaphoreGive(handle)          wrap_ipc_give((handle))
 
-#define vSemaphoreDelete(handle)        wrap_ipc_delete((handle))
+#define vSemaphoreDelete(handle)        wrap_ipc_delete((SemaphoreHandle_t)(handle))
 
 #define xSemaphoreTakeFromISR(handle, pxHigherPriorityTaskWoken) \
     wrap_ipc_take_in_isr((handle), (pxHigherPriorityTaskWoken))
@@ -101,7 +148,7 @@ BaseType_t xQueueRemoveFromSet( QueueSetMemberHandle_t xQueueOrSemaphore, QueueS
 
 #define xQueueReset(handle)             wrap_mq_reset((handle))
 
-#define xQueueSend(handle, item, ticks) wrap_mq_send((handle), (item), (ticks))
+#define xQueueSend(handle, item, ticks) wrap_mq_send((handle), (item), (ticks), 0)
 
 #define xQueueReceive(handle, buffer, ticks) \
     wrap_mq_recv((handle), (buffer), (ticks))
@@ -112,10 +159,19 @@ BaseType_t xQueueRemoveFromSet( QueueSetMemberHandle_t xQueueOrSemaphore, QueueS
 #define xQueueReceiveFromISR(handle, buffer, pxHigherPriorityTaskWoken ) \
     wrap_mq_recv_in_isr((handle), (buffer), (pxHigherPriorityTaskWoken))
 
-#define vQueueDelete(handle)            wrap_mq_delete((handle))
+// #define vQueueDelete(handle)            wrap_mq_delete((handle))
+#define vQueueDelete                    wrap_mq_delete
 
 #define xQueueOverwriteFromISR(handle, item, pxHigherPriorityTaskWoken ) \
     wrap_mq1_replace_in_isr((handle), (item), (pxHigherPriorityTaskWoken))
 
+#define uxQueueMessagesWaiting          wrap_mq_entries
+
 #define xQueueIsQueueFullFromISR(handle) \
     wrap_mq_is_full(handle)
+
+#define xQueueAddToSet(qOrSem_handle, handle) \
+    wrap_qset_add((qOrSem_handle), (handle))
+
+#define xQueueRemoveFromSet(qOrSem_handle, handle) \
+    wrap_qset_remove((qOrSem_handle), (handle))

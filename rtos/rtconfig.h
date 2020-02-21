@@ -6,7 +6,7 @@
 #ifndef __RTCONFIG_H__
 #define __RTCONFIG_H__
 
-#include "FreeRTOS.h"
+#include "freertos/FreeRTOS.h"
 
 /* User Config */
 
@@ -19,6 +19,7 @@
 #define RT_CPUS_NR                      (2)
 #define RT_USING_NEWLIB
 
+#define rt_malloc                       malloc
 #define rt_free                         free
 // #ifndef CONFIG_PRIORITY_MAX
 // # define CONFIG_PRIORITY_MAX            (3)     /* NVIC */

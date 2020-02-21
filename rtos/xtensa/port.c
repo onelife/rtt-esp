@@ -90,7 +90,6 @@
 // SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 */
-
 #include <stdlib.h>
 #include <string.h>
 #include <xtensa/config/core.h>
@@ -109,6 +108,7 @@
 #include "esp_intr_alloc.h"
 #include "esp_log.h"
 #include "sdkconfig.h"
+#include "esp_compiler.h"
 
 /* Defined in portasm.h */
 extern void _frxt_tick_timer_init(void);
@@ -127,10 +127,10 @@ extern void _xt_coproc_init(void);
 _Static_assert(tskNO_AFFINITY == CONFIG_FREERTOS_NO_AFFINITY, "incorrect tskNO_AFFINITY value");
 
 /*-----------------------------------------------------------*/
-
 unsigned port_xSchedulerRunning[portNUM_PROCESSORS] = {0}; // Duplicate of inaccessible xSchedulerRunning; needed at startup to avoid counting nesting
 unsigned port_interruptNesting[portNUM_PROCESSORS] = {0};  // Interrupt nesting level. Increased/decreased in portasm.c, _frxt_int_enter/_frxt_int_exit
-
+BaseType_t port_uxCriticalNesting[portNUM_PROCESSORS] = {0};  
+BaseType_t port_uxOldInterruptState[portNUM_PROCESSORS] = {0};  
 /*-----------------------------------------------------------*/
 
 // User exception dispatcher when exiting
@@ -227,9 +227,20 @@ StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TaskFunction_t px
 	task_thread_local_start = (void *)(((uint32_t)pxTopOfStack - XT_CP_SIZE - thread_local_sz) & ~0xf);
 	memcpy(task_thread_local_start, &_thread_local_start, thread_local_sz);
 	threadptr = (uint32_t *)(sp + XT_STK_EXTRA);
-	/* shift threadptr by the offset of _thread_local_start from DROM start;
-	   need to take into account extra 16 bytes offset */
-	*threadptr = (uint32_t)task_thread_local_start - ((uint32_t)&_thread_local_start - (uint32_t)&_rodata_start) - 0x10;
+	/* Calculate THREADPTR value:
+	 * The generated code will add THREADPTR value to a constant value determined at link time,
+	 * to get the address of the TLS variable.
+	 * The constant value is calculated by the linker as follows
+	 * (search for 'tpoff' in elf32-xtensa.c in BFD):
+	 *    offset = address - tls_section_vma + align_up(TCB_SIZE, tls_section_alignment)
+	 * where TCB_SIZE is hardcoded to 8. There doesn't seem to be a way to propagate
+	 * the section alignment value from the ld script into the code, so it is hardcoded
+	 * in both places.
+	 */
+	const uint32_t tls_section_alignment = 0x10;  /* has to be in sync with ALIGN value of .flash.rodata section */
+	const uint32_t tcb_size = 8; /* Unrelated to FreeRTOS, this is the constant from BFD */
+	const uint32_t base = (tcb_size + tls_section_alignment - 1) & (~(tls_section_alignment - 1));
+	*threadptr = (uint32_t)task_thread_local_start - ((uint32_t)&_thread_local_start - (uint32_t)&_rodata_start) - base;
 
 	#if XCHAL_CP_NUM > 0
 	/* Init the coprocessor save area (see xtensa_context.h) */
@@ -355,74 +366,6 @@ void vPortAssertIfInISR(void)
 	configASSERT(xPortInIsrContext());
 }
 
-/*
- * For kernel use: Initialize a per-CPU mux. Mux will be initialized unlocked.
- */
-void vPortCPUInitializeMutex(portMUX_TYPE *mux) {
-
-#ifdef CONFIG_FREERTOS_PORTMUX_DEBUG
-	ets_printf("Initializing mux %p\n", mux);
-	mux->lastLockedFn="(never locked)";
-	mux->lastLockedLine=-1;
-#endif
-	mux->owner=portMUX_FREE_VAL;
-	mux->count=0;
-}
-
-#include "portmux_impl.h"
-
-/*
- * For kernel use: Acquire a per-CPU mux. Spinlocks, so don't hold on to these muxes for too long.
- */
-#ifdef CONFIG_FREERTOS_PORTMUX_DEBUG
-void vPortCPUAcquireMutex(portMUX_TYPE *mux, const char *fnName, int line) {
-	unsigned int irqStatus = portENTER_CRITICAL_NESTED();
-	vPortCPUAcquireMutexIntsDisabled(mux, portMUX_NO_TIMEOUT, fnName, line);
-	portEXIT_CRITICAL_NESTED(irqStatus);
-}
-
-bool vPortCPUAcquireMutexTimeout(portMUX_TYPE *mux, int timeout_cycles, const char *fnName, int line) {
-	unsigned int irqStatus = portENTER_CRITICAL_NESTED();
-	bool result = vPortCPUAcquireMutexIntsDisabled(mux, timeout_cycles, fnName, line);
-	portEXIT_CRITICAL_NESTED(irqStatus);
-	return result;
-}
-
-#else
-void vPortCPUAcquireMutex(portMUX_TYPE *mux) {
-	unsigned int irqStatus = portENTER_CRITICAL_NESTED();
-	vPortCPUAcquireMutexIntsDisabled(mux, portMUX_NO_TIMEOUT);
-	portEXIT_CRITICAL_NESTED(irqStatus);
-}
-
-bool vPortCPUAcquireMutexTimeout(portMUX_TYPE *mux, int timeout_cycles) {
-	unsigned int irqStatus = portENTER_CRITICAL_NESTED();
-	bool result = vPortCPUAcquireMutexIntsDisabled(mux, timeout_cycles);
-	portEXIT_CRITICAL_NESTED(irqStatus);
-	return result;
-}
-#endif
-
-
-/*
- * For kernel use: Release a per-CPU mux
- *
- * Mux must be already locked by this core
- */
-#ifdef CONFIG_FREERTOS_PORTMUX_DEBUG
-void vPortCPUReleaseMutex(portMUX_TYPE *mux, const char *fnName, int line) {
-	unsigned int irqStatus = portENTER_CRITICAL_NESTED();
-	vPortCPUReleaseMutexIntsDisabled(mux, fnName, line);
-	portEXIT_CRITICAL_NESTED(irqStatus);
-}
-#else
-void vPortCPUReleaseMutex(portMUX_TYPE *mux) {
-	unsigned int irqStatus = portENTER_CRITICAL_NESTED();
-	vPortCPUReleaseMutexIntsDisabled(mux);
-	portEXIT_CRITICAL_NESTED(irqStatus);
-}
-#endif
-
 void vPortSetStackWatchpoint( void* pxStackStart ) {
 	//Set watchpoint 1 to watch the last 32 bytes of the stack.
 	//Unfortunately, the Xtensa watchpoints can't set a watchpoint on a random [base - base+n] region because
@@ -435,34 +378,45 @@ void vPortSetStackWatchpoint( void* pxStackStart ) {
 	esp_set_watchpoint(1, (char*)addr, 32, ESP_WATCHPOINT_STORE);
 }
 
-#if defined(CONFIG_SPIRAM)
-/*
- * Compare & set (S32C1) does not work in external RAM. Instead, this routine uses a mux (in internal memory) to fake it.
- */
-static portMUX_TYPE extram_mux = portMUX_INITIALIZER_UNLOCKED;
-
-void uxPortCompareSetExtram(volatile uint32_t *addr, uint32_t compare, uint32_t *set) {
-	uint32_t prev;
-#ifdef CONFIG_FREERTOS_PORTMUX_DEBUG
-	vPortCPUAcquireMutexIntsDisabled(&extram_mux, portMUX_NO_TIMEOUT, __FUNCTION__, __LINE__);
-#else
-	vPortCPUAcquireMutexIntsDisabled(&extram_mux, portMUX_NO_TIMEOUT);
-#endif
-	prev=*addr;
-	if (prev==compare) {
-		*addr=*set;
-	}
-	*set=prev;
-#ifdef CONFIG_FREERTOS_PORTMUX_DEBUG
-	vPortCPUReleaseMutexIntsDisabled(&extram_mux, __FUNCTION__, __LINE__);
-#else
-	vPortCPUReleaseMutexIntsDisabled(&extram_mux);
-#endif
-}
-#endif //defined(CONFIG_SPIRAM)
-
-
-
 uint32_t xPortGetTickRateHz(void) {
 	return (uint32_t)configTICK_RATE_HZ;
+}
+
+void __attribute__((optimize("-O3"))) vPortEnterCritical(portMUX_TYPE *mux)
+{
+	BaseType_t oldInterruptLevel = portENTER_CRITICAL_NESTED();
+	/* Interrupts may already be disabled (because we're doing this recursively) 
+	* but we can't get the interrupt level after
+	* vPortCPUAquireMutex, because it also may mess with interrupts.
+	* Get it here first, then later figure out if we're nesting
+	* and save for real there.
+	*/ 
+	vPortCPUAcquireMutex( mux );
+	BaseType_t coreID = xPortGetCoreID();
+	BaseType_t newNesting = port_uxCriticalNesting[coreID] + 1;
+	port_uxCriticalNesting[coreID] = newNesting;
+
+	if( newNesting == 1 )
+	{
+		//This is the first time we get called. Save original interrupt level.
+		port_uxOldInterruptState[coreID] = oldInterruptLevel;
+	}
+}
+
+void __attribute__((optimize("-O3"))) vPortExitCritical(portMUX_TYPE *mux)
+{
+	vPortCPUReleaseMutex( mux );
+	BaseType_t coreID = xPortGetCoreID();
+	BaseType_t nesting =  port_uxCriticalNesting[coreID];
+	
+	if(nesting > 0U)
+	{
+		nesting--;
+		port_uxCriticalNesting[coreID] = nesting;
+
+		if( nesting == 0U )
+		{
+			portEXIT_CRITICAL_NESTED(port_uxOldInterruptState[coreID]);
+		}
+	}
 }

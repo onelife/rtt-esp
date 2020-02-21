@@ -1,5 +1,5 @@
 #include "FreeRTOS.h"
-#include "portmux_impl.h"
+// #include "portmux_impl.h"
 #include "include/rthw.h"
 #include "include/rtt_port.h"
 
@@ -9,6 +9,9 @@
     - xQueueGiveFromISR
     - xQueueGenericReceive
     - vQueueDelete
+    esp_event.c: ~ 
+    - xQueueSendToBack (TODO)
+    - xQueueSendToBackFromISR (TODO)
     ipc.c: ~ RTT Mutex (Non-recursive) + Semaphore (binary)
     - xQueueCreateMutex
     - xQueueGenericCreate
@@ -29,9 +32,9 @@
     - xQueueGetMutexHolder
     - vQueueDelete
     cache_utils.c: ~ RTT Mutex (Recursive)
+    - xQueueCreateMutex
     - xQueueTakeMutexRecursive
     - xQueueGiveMutexRecursive
-    - xQueueCreateMutex
     ringbuf.c: ~ RTT Semaphore
     - xQueueGenericReceive
     - xQueueGenericSend
@@ -49,6 +52,12 @@
     - xQueueGenericSend
     pthread.c: ~ RTT Mutex (Non-recursive)
     - xQueueCreateMutex
+    sys_arch.c:
+    - uxQueueMessagesWaiting (TODO)
+    sha.c:
+    - uxSemaphoreGetCount
+    i2s.c
+    - uxQueueSpacesAvailable (TODO)
  */
 
 SemaphoreHandle_t wrap_mutex_create(const char *name) {
@@ -57,9 +66,10 @@ SemaphoreHandle_t wrap_mutex_create(const char *name) {
     handle = (SemaphoreHandle_t)rt_malloc(sizeof(generic_ipc_t));
     if (!handle) return NULL;
 
-    handle->typ = RTT_MUTEX;
+    handle->type = RTT_MUTEX;
     handle->maxCnt = 0;
-    if (RT_EOK != rt_mutex_init(&handle->mem.mux, name, RT_IPC_FLAG_FIFO)) {
+    handle->cntr = NULL;
+    if (RT_EOK != rt_mutex_init(&handle->member.mux, name, RT_IPC_FLAG_FIFO)) {
         rt_free(handle);
         return NULL;
     }
@@ -74,9 +84,10 @@ SemaphoreHandle_t wrap_bin_sem_create(const char *name,
     handle = (SemaphoreHandle_t)rt_malloc(sizeof(generic_ipc_t));
     if (!handle) return NULL;
 
-    handle->typ = RTT_SEMAPHORE;
+    handle->type = RTT_SEMAPHORE;
     handle->maxCnt = 1;
-    if (RT_EOK != rt_sem_init(&handle->mem.sem, name, uxInitialCount,
+    handle->cntr = NULL;
+    if (RT_EOK != rt_sem_init(&handle->member.sem, name, uxInitialCount,
         RT_IPC_FLAG_FIFO)) {
         rt_free(handle);
         return NULL;
@@ -92,9 +103,10 @@ SemaphoreHandle_t wrap_cnt_sem_create(const char *name,
     handle = (SemaphoreHandle_t)rt_malloc(sizeof(generic_ipc_t));
     if (!handle) return NULL;
 
-    handle->typ = RTT_SEMAPHORE;
+    handle->type = RTT_SEMAPHORE;
     handle->maxCnt = uxMaxCount;
-    if (RT_EOK != rt_sem_init(&handle->mem.sem, name, uxInitialCount,
+    handle->cntr = NULL;
+    if (RT_EOK != rt_sem_init(&handle->member.sem, name, uxInitialCount,
         RT_IPC_FLAG_FIFO)) {
         rt_free(handle);
         return NULL;
@@ -111,9 +123,10 @@ SemaphoreHandle_t wrap_cnt_sem_init(const char *name,
     handle = (SemaphoreHandle_t)pxStaticQueue;
     if (!handle) return NULL;
 
-    handle->typ = RTT_SEMAPHORE;
+    handle->type = RTT_SEMAPHORE;
     handle->maxCnt = uxMaxCount;
-    if (RT_EOK != rt_sem_init(&handle->mem.sem, name,
+    handle->cntr = NULL;
+    if (RT_EOK != rt_sem_init(&handle->member.sem, name,
         uxInitialCount, RT_IPC_FLAG_FIFO))
         return NULL;
 
@@ -123,11 +136,12 @@ SemaphoreHandle_t wrap_cnt_sem_init(const char *name,
 BaseType_t wrap_ipc_take(SemaphoreHandle_t handle, TickType_t ticks) {
     rt_err_t ret;
 
-    if (RTT_MUTEX == handle->typ) {
-        ret = rt_mutex_take(&handle->mem.mux, (rt_int32_t)ticks);
-
-    } else if (RTT_SEMAPHORE == handle->typ) {
-        ret = rt_sem_take(&handle->mem.sem, (rt_int32_t)ticks);
+    if (RTT_MUTEX == handle->type) {
+        ret = rt_mutex_take(&handle->member.mux, (rt_int32_t)ticks);
+    } else if (RTT_SEMAPHORE == handle->type) {
+        ret = rt_sem_take(&handle->member.sem, (rt_int32_t)ticks);
+    } else {
+        ret = RT_EINVAL;
     }
 
     return (RT_EOK == ret) ? pdTRUE : errQUEUE_EMPTY;
@@ -137,11 +151,12 @@ BaseType_t wrap_ipc_take_in_isr(SemaphoreHandle_t handle,
     BaseType_t * const pxHigherPriorityTaskWoken) {
     rt_err_t ret;
 
-    if (RTT_MUTEX == handle->typ) {
+    if (RTT_MUTEX == handle->type) {
         ret = RT_EINVAL;
-
-    } else if (RTT_SEMAPHORE == handle->typ) {
-        ret = rt_sem_take(&handle->mem.sem, 0);
+    } else if (RTT_SEMAPHORE == handle->type) {
+        ret = rt_sem_take(&handle->member.sem, 0);
+    } else {
+        ret = RT_EINVAL;
     }
 
     *pxHigherPriorityTaskWoken = (RT_EOK == ret) ? pdTRUE : pdFALSE;    // TODO
@@ -151,15 +166,16 @@ BaseType_t wrap_ipc_take_in_isr(SemaphoreHandle_t handle,
 BaseType_t wrap_ipc_give(SemaphoreHandle_t handle) {
     rt_err_t ret;
 
-    if (RTT_MUTEX == handle->typ) {
-        ret = rt_mutex_release(&handle->mem.mux);
-
-    } else if (RTT_SEMAPHORE == handle->typ) {
-        if (handle->mem.sem.value >= handle->maxCnt) {
+    if (RTT_MUTEX == handle->type) {
+        ret = rt_mutex_release(&handle->member.mux);
+    } else if (RTT_SEMAPHORE == handle->type) {
+        if (handle->member.sem.value >= handle->maxCnt) {
             ret = RT_EFULL;
         } else {
-            ret = rt_sem_release(&handle->mem.sem);
+            ret = rt_sem_release(&handle->member.sem);
         }
+    } else {
+        ret = RT_EINVAL;
     }
 
     return (RT_EOK == ret) ? pdTRUE : errQUEUE_FULL;
@@ -169,15 +185,16 @@ BaseType_t wrap_ipc_give_in_isr(SemaphoreHandle_t handle,
     BaseType_t * const pxHigherPriorityTaskWoken) {
     rt_err_t ret;
 
-    if (RTT_MUTEX == handle->typ) {
+    if (RTT_MUTEX == handle->type) {
         ret = RT_EINVAL;
-
-    } else if (RTT_SEMAPHORE == handle->typ) {
-        if (handle->mem.sem.value >= handle->maxCnt) {
+    } else if (RTT_SEMAPHORE == handle->type) {
+        if (handle->member.sem.value >= handle->maxCnt) {
             ret = RT_EFULL;
         } else {
-            ret = rt_sem_release(&handle->mem.sem);
+            ret = rt_sem_release(&handle->member.sem);
         }
+    } else {
+        ret = RT_EINVAL;
     }
 
     *pxHigherPriorityTaskWoken = (RT_EOK == ret) ? pdTRUE : pdFALSE;    // TODO
@@ -185,21 +202,21 @@ BaseType_t wrap_ipc_give_in_isr(SemaphoreHandle_t handle,
 }
 
 void wrap_ipc_delete(SemaphoreHandle_t handle) {
-    if (RTT_MUTEX == handle->typ) {
-        (void)rt_mutex_detach(&handle->mem.mux);
-
-    } else if (RTT_SEMAPHORE == handle->typ) {
-        (void)rt_sem_detach(&handle->mem.sem);
+    if (RTT_MUTEX == handle->type) {
+        (void)rt_mutex_detach(&handle->member.mux);
+    } else if (RTT_SEMAPHORE == handle->type) {
+        (void)rt_sem_detach(&handle->member.sem);
+    } else {
+        return;
     }
 
     rt_free(handle);
 }
 
 void *wrap_ipc_get_owner(SemaphoreHandle_t handle) {
-    if (RTT_MUTEX == handle->typ) {
-        return handle->mem.mux.owner;
-
-    } else if (RTT_SEMAPHORE == handle->typ) {
+    if (RTT_MUTEX == handle->type) {
+        return handle->member.mux.owner;
+    } else /*if (RTT_SEMAPHORE == handle->type)*/ {
         return NULL;
     }
 }
@@ -221,23 +238,24 @@ void *wrap_ipc_get_owner(SemaphoreHandle_t handle) {
 
 QueueHandle_t wrap_mq_create(const char *name, const UBaseType_t uxQueueLength,
     const UBaseType_t uxItemSize) {
-    QueueHandle_t handle;
-    void *msgpool;
+    QueueHandle_t handle = NULL;
+    void *msgpool = NULL;
 
     do {
         rt_size_t msg_size = RT_ALIGN(uxItemSize, RT_ALIGN_SIZE);
-        rt_size_t pool_size = (msg_size + 4) * uxQueueLength);
+        rt_size_t pool_size = (msg_size + 4) * uxQueueLength;
 
         if (NULL == (handle = (QueueHandle_t)rt_malloc(sizeof(generic_ipc_t))))
             break;
-        if ((msgpool = rt_malloc(pool_size))
+        if ((msgpool = rt_malloc(pool_size)))
             break;
 
-        handle->typ = RTT_QUEUE;
-        handle->maxCnt = 0;
-        if (RT_EOK != rt_mq_init(&handle->mem.mq, name, msgpool, msg_size, 
+        handle->type = RTT_QUEUE;
+        if (RT_EOK != rt_mq_init(&handle->member.mq, name, msgpool, msg_size, 
             pool_size, RT_IPC_FLAG_FIFO))
             break;
+        handle->maxCnt = handle->member.mq.max_msgs;
+        handle->cntr = NULL;
         return handle;
     } while (0);
 
@@ -247,8 +265,8 @@ QueueHandle_t wrap_mq_create(const char *name, const UBaseType_t uxQueueLength,
 }
 
 BaseType_t wrap_mq_reset(QueueHandle_t handle) {
-    if (RTT_QUEUE == handle->typ) {
-        if (RT_EOK != rt_mq_control(&handle->mem.mq, RT_IPC_CMD_RESET, NULL))
+    if (RTT_QUEUE == handle->type) {
+        if (RT_EOK != rt_mq_control(&handle->member.mq, RT_IPC_CMD_RESET, NULL))
             return pdFALSE;
         else
             return pdPASS;
@@ -259,16 +277,23 @@ BaseType_t wrap_mq_reset(QueueHandle_t handle) {
 }
 
 BaseType_t wrap_mq_send(QueueHandle_t handle, const void * const item,
-    TickType_t ticks) {
+    TickType_t ticks, uint8_t is_urgent) {
     (void)ticks;
 
-    if (RTT_QUEUE == handle->typ) {
-        if (RT_EOK != rt_mq_send(
-            &handle->mem.mq, item, handle->mem.mq.msg_size))
-            return errQUEUE_FULL;
-        else
-            return pdPASS;
-
+    if (RTT_QUEUE == handle->type) {
+        if (!is_urgent) {
+            if (RT_EOK != rt_mq_send(
+                &handle->member.mq, (void *)item, handle->member.mq.msg_size))
+                return errQUEUE_FULL;
+            else
+                return pdPASS;
+        } else {
+            if (RT_EOK != rt_mq_urgent(
+                &handle->member.mq, (void *)item, handle->member.mq.msg_size))
+                return errQUEUE_FULL;
+            else
+                return pdPASS;
+        }
     } else {
         return pdFAIL;
     }
@@ -278,15 +303,14 @@ BaseType_t wrap_mq_send_in_isr(QueueHandle_t handle, const void * const item,
     BaseType_t * const pxHigherPriorityTaskWoken) {
     BaseType_t ret;
 
-    if (RTT_QUEUE == handle->typ) {
+    if (RTT_QUEUE == handle->type) {
         if (RT_EOK != rt_mq_send(
-            &handle->mem.mq, item, handle->mem.mq.msg_size)) {
-            *pxHigherPriorityTaskWoken
+            &handle->member.mq, (void *)item, handle->member.mq.msg_size)) {
+            // *pxHigherPriorityTaskWoken
             ret = errQUEUE_FULL;
-        }
-        else
+        } else {
             ret = pdPASS;
-
+        }
     } else {
         ret = pdFAIL;
     }
@@ -299,13 +323,12 @@ BaseType_t wrap_mq_recv(QueueHandle_t handle, void * const buffer,
     TickType_t ticks) {
     BaseType_t ret;
 
-    if (RTT_QUEUE == handle->typ) {
+    if (RTT_QUEUE == handle->type) {
         if (RT_EOK != rt_mq_recv(
-            &handle->mem.mq, buffer, handle->mem.mq.msg_size, ticks))
+            &handle->member.mq, buffer, handle->member.mq.msg_size, ticks))
             ret = errQUEUE_EMPTY;
         else
             ret = pdPASS;
-
     } else {
         ret = pdFAIL;
     }
@@ -317,9 +340,9 @@ BaseType_t wrap_mq_recv_in_isr(QueueHandle_t handle, void * const buffer,
     BaseType_t * const pxHigherPriorityTaskWoken) {
     BaseType_t ret;
 
-    if (RTT_QUEUE == handle->typ) {
+    if (RTT_QUEUE == handle->type) {
         if (RT_EOK != rt_mq_recv(
-            &handle->mem.mq, buffer, handle->mem.mq.msg_size, 0))
+            &handle->member.mq, buffer, handle->member.mq.msg_size, 0))
             ret = errQUEUE_EMPTY;
         else
             ret = pdPASS;
@@ -336,15 +359,15 @@ BaseType_t wrap_mq1_replace_in_isr(QueueHandle_t handle,
     const void * const item, BaseType_t * const pxHigherPriorityTaskWoken) {
     BaseType_t ret;
 
-    if (RTT_QUEUE == handle->typ) {
-        if (handle->mem.mq.max_msg != 1) {
+    if (RTT_QUEUE == handle->type) {
+        if (handle->member.mq.max_msgs != 1) {
             ret = pdFAIL;
         } else {
             register rt_ubase_t temp;
 
             /* disable interrupt */
             temp = rt_hw_interrupt_disable();
-            if (!handle->mem.mq.entry) {
+            if (!handle->member.mq.entry) {
                 /* empty */
                 /* enable interrupt */
                 rt_hw_interrupt_enable(temp);
@@ -352,15 +375,14 @@ BaseType_t wrap_mq1_replace_in_isr(QueueHandle_t handle,
                     pxHigherPriorityTaskWoken);
             } else {
                 /* full then replace */
-                struct rt_mq_message *msg;
+                void *msg;
                 /* get the first item */
-                msg = (struct rt_mq_message *)handle->mem.mq.msg_queue_head;
-                rt_memcpy(msg + 1, item, handle->mem.mq.msg_size);
+                msg = handle->member.mq.msg_queue_head;
+                rt_memcpy(msg + 1, item, handle->member.mq.msg_size);
                 rt_hw_interrupt_enable(temp);
                 ret = pdPASS;
             }
         }
-
     } else {
         ret = pdFAIL;
     }
@@ -370,21 +392,39 @@ BaseType_t wrap_mq1_replace_in_isr(QueueHandle_t handle,
 }
 
 void wrap_mq_delete(QueueHandle_t handle) {
-    if (RTT_MUTEX == handle->typ) {
-        (void)wrap_mq_delete(&handle->mem.mq);
+    if (RTT_QUEUE == handle->type) {
+        (void)rt_mq_detach(&handle->member.mq);
     }
 
+    rt_free(handle->member.mq.msg_pool);
     rt_free(handle);
+}
+
+UBaseType_t wrap_mq_entries(const QueueHandle_t handle) {
+    BaseType_t ret;
+
+    if (RTT_QUEUE == handle->type) {
+        register rt_ubase_t temp;
+        /* disable interrupt */
+        temp = rt_hw_interrupt_disable();
+        ret = handle->member.mq.entry;
+        /* enable interrupt */
+        rt_hw_interrupt_enable(temp);
+    } else {
+        ret = 0;
+    }
+
+    return ret;
 }
 
 BaseType_t wrap_mq_is_full(const QueueHandle_t handle) {
     BaseType_t ret;
 
-    if (RTT_QUEUE == handle->typ) {
+    if (RTT_QUEUE == handle->type) {
         register rt_ubase_t temp;
         /* disable interrupt */
         temp = rt_hw_interrupt_disable();
-        ret = (NULL == handle->mem.mq.msg_queue_free) ? pdTRUE : pdFALSE;
+        ret = (NULL == handle->member.mq.msg_queue_free) ? pdTRUE : pdFALSE;
         /* enable interrupt */
         rt_hw_interrupt_enable(temp);
 
@@ -396,19 +436,119 @@ BaseType_t wrap_mq_is_full(const QueueHandle_t handle) {
 }
 
 
+QueueSetHandle_t wrap_qset_create(const UBaseType_t length) {
+    QueueSetHandle_t handle;
+
+    RT_DEBUG_NOT_IN_INTERRUPT;
+
+    handle = rt_malloc(sizeof(QueueSet_t));
+    if (!handle) return NULL;
+
+    rt_slist_init(&(handle->member));
+    handle->length = length;
+
+    return handle;
+}
 
 /*
     ringbuf.c
     - xQueueAddToSet
     - xQueueRemoveFromSet
  */
-BaseType_t xQueueAddToSet( QueueSetMemberHandle_t xQueueOrSemaphore, QueueSetHandle_t xQueueSet ) {
-    return pdFAIL;
+BaseType_t wrap_qset_add(QueueSetMemberHandle_t qOrSem_handle,
+    QueueSetHandle_t handle) {
+    register rt_base_t temp;
+
+    /* parameter check */
+    RT_ASSERT(qOrSem_handle != RT_NULL);
+    RT_ASSERT(handle != RT_NULL);
+
+    /* disable interrupt */
+    temp = rt_hw_interrupt_disable();
+
+    RT_DEBUG_LOG(RT_DEBUG_IPC, ("thread %s add %s(%d) to qset:%p",
+        rt_thread_self()->name,
+        ((struct rt_object *)&(qOrSem_handle->member))->name,
+        qOrSem_handle->type,
+        handle));
+
+    /* Cannot add a queue/semaphore to more than one queue set. */
+    if (qOrSem_handle->cntr) {
+        rt_hw_interrupt_enable(temp);
+        return pdFAIL;
+    }
+
+    /* Cannot add a queue/semaphore to a queue set if there are already
+    items in the queue/semaphore. */
+    if (RTT_SEMAPHORE == qOrSem_handle->type) {
+        /* no way to know */
+    } else if (RTT_QUEUE == qOrSem_handle->type) {
+        if (qOrSem_handle->member.mq.entry) {
+            rt_hw_interrupt_enable(temp);
+            return pdFAIL;
+        }
+    } else {
+        /* wrong type */
+        rt_hw_interrupt_enable(temp);
+        return pdFAIL;
+    }
+
+    qOrSem_handle->cntr = handle;
+
+    /* enable interrupt */
+    rt_hw_interrupt_enable(temp);
+    return pdPASS;
 }
 
-BaseType_t xQueueRemoveFromSet( QueueSetMemberHandle_t xQueueOrSemaphore, QueueSetHandle_t xQueueSet ) {
-    return pdFAIL;
+BaseType_t wrap_qset_remove(QueueSetMemberHandle_t qOrSem_handle,
+    QueueSetHandle_t handle) {
+    register rt_base_t temp;
+
+    /* parameter check */
+    RT_ASSERT(qOrSem_handle != RT_NULL);
+    RT_ASSERT(handle != RT_NULL);
+
+    /* disable interrupt */
+    temp = rt_hw_interrupt_disable();
+
+    RT_DEBUG_LOG(RT_DEBUG_IPC, ("thread %s remove %s(%d) from qset:%p",
+        rt_thread_self()->name,
+        ((struct rt_object *)&(qOrSem_handle->member))->name,
+        qOrSem_handle->type,
+        handle));
+
+    /* The queue was not a member of the set. */
+    if (qOrSem_handle->cntr != handle) {
+        rt_hw_interrupt_enable(temp);
+        return pdFAIL;
+    }
+
+    /* It is dangerous to remove a queue from a set when the queue is
+    not empty because the queue set will still hold pending events for
+    the queue. */
+    if (RTT_SEMAPHORE == qOrSem_handle->type) {
+        /* no way to know */
+    } else if (RTT_QUEUE == qOrSem_handle->type) {
+        if (qOrSem_handle->member.mq.entry) {
+            rt_hw_interrupt_enable(temp);
+            return pdFAIL;
+        }
+    } else {
+        /* wrong type */
+        rt_hw_interrupt_enable(temp);
+        return pdFAIL;
+    }
+
+    qOrSem_handle->cntr = NULL;
+
+    /* enable interrupt */
+    rt_hw_interrupt_enable(temp);
+    return pdPASS;
 }
+
+
+
+
 
 void vTaskStartScheduler(void) {
     /* disable interrupt*/
@@ -473,11 +613,15 @@ void rt_hw_local_irq_enable(rt_base_t level) {
 }
 
 void rt_hw_spin_lock(rt_hw_spinlock_t *lock) {
-    vPortCPUAcquireMutexIntsDisabled(lock, portMUX_NO_TIMEOUT);
+    vPortCPUAcquireMutex(lock);
 }
 void rt_hw_spin_unlock(rt_hw_spinlock_t *lock) {
-    vPortCPUReleaseMutexIntsDisabled(lock);
+    vPortCPUReleaseMutex(lock);
 }
+
+void rt_hw_secondary_cpu_idle_exec(void) {
+    // TODO:
+ }
 
 /**
  * This function will initialize thread stack

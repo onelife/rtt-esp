@@ -175,3 +175,42 @@ BaseType_t wrap_qset_remove(QueueSetMemberHandle_t qOrSem_handle,
 
 #define xQueueRemoveFromSet(qOrSem_handle, handle) \
     wrap_qset_remove((qOrSem_handle), (handle))
+
+
+// TaskHandle_t xTaskGetIdleTaskHandleForCPU( UBaseType_t cpuid )
+// rt_thread_t rt_thread_idle_gethandler_by_id(int id)
+#define xTaskGetIdleTaskHandleForCPU(id) rt_thread_idle_gethandler_for_id(id)
+
+// void vTaskDelete( TaskHandle_t xTaskToDelete )
+// rt_err_t rt_thread_delete(rt_thread_t thread)
+#define vTaskDelete(task) (void)rt_thread_delete(task)
+
+// typedef void (*TaskFunction_t)( void * );
+// BaseType_t xTaskCreatePinnedToCore( TaskFunction_t pxTaskCode,
+//                         const char * const pcName,
+//                         const uint32_t usStackDepth,
+//                         void * const pvParameters,
+//                         UBaseType_t uxPriority,
+//                         TaskHandle_t * const pxCreatedTask,
+//                         const BaseType_t xCoreID )
+// rt_thread_t rt_thread_create(const char *name,
+//                              void (*entry)(void *parameter),
+//                              void       *parameter,
+//                              rt_uint32_t stack_size,
+//                              rt_uint8_t  priority,
+//                              rt_uint32_t tick)
+// TODO: tick?
+#define xTaskCreatePinnedToCore(func, name, size, param, prio, pTask, id) { \
+    pTask = rt_thread_create(name, func, param, size, prio, 100); \
+    rt_thread_control(pTask, RT_THREAD_CTRL_BIND_CPU, id); \
+}
+
+BaseType_t xTaskCreatePinnedToCore(TaskFunction_t pxTaskCode,
+    const char * const pcName,
+    const uint32_t usStackDepth,
+    void * const pvParameters,
+    UBaseType_t uxPriority,
+    TaskHandle_t * const pxCreatedTask,
+    const BaseType_t xCoreID);
+
+BaseType_t xTaskGetSchedulerState(void);

@@ -13,7 +13,7 @@
 
 /* ESP32 Config */
 
-#define ESP32
+#define RTT_ESP32
 
 #define RT_USING_SMP
 #define RT_CPUS_NR                      (2)

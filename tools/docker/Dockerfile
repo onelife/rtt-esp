@@ -38,7 +38,7 @@ RUN apt-get update && apt-get -yq dist-upgrade \
 # user and password
 RUN echo "root:$ROOT_PASSWORD" | chpasswd \
     && groupadd rtt \
-    && useradd -d /home/rtt -ms /bin/bash -g rtt -G sudo rtt \
+    && useradd -d /home/rtt -ms /bin/bash -g rtt -G sudo,dialout rtt \
     && echo "rtt:$USER_PASSWORD" | chpasswd
 
 # python library

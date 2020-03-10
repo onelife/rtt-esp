@@ -202,6 +202,11 @@ static rt_err_t _rt_thread_init(struct rt_thread *thread,
     thread->lwp = RT_NULL;
 #endif
 
+#if defined(RTT_ESP32) && (configUSE_NEWLIB_REENTRANT == 1)
+    /* Initialise this task's Newlib reent structure. */
+    esp_reent_init(&(thread->newLib_reent));
+#endif
+
     RT_OBJECT_HOOK_CALL(rt_thread_inited_hook, (thread));
 
     return RT_EOK;
@@ -450,6 +455,10 @@ rt_err_t rt_thread_delete(rt_thread_t thread)
 
     /* disable interrupt */
     lock = rt_hw_interrupt_disable();
+
+#if defined(RTT_ESP32) && (configUSE_NEWLIB_REENTRANT == 1)
+    _reclaim_reent(&(thread->newLib_reent));
+#endif
 
     /* insert to defunct thread list */
     rt_list_insert_after(&rt_thread_defunct, &(thread->tlist));

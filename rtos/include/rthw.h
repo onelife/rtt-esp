@@ -135,9 +135,9 @@ void rt_hw_exception_install(rt_err_t (*exception_handle)(void *context));
 void rt_hw_us_delay(rt_uint32_t us);
 
 #ifdef RT_USING_SMP
-# ifdef ESP32
+# ifdef RTT_ESP32
 typedef PRIVILEGED_DATA portMUX_TYPE rt_hw_spinlock_t;
-# else /* ESP32 */
+# else /* RTT_ESP32 */
 typedef union {
     unsigned long slock;
     struct __arch_tickets {
@@ -145,7 +145,7 @@ typedef union {
         unsigned short next;
     } tickets;
 } rt_hw_spinlock_t;
-# endif /* ESP32 */
+# endif /* RTT_ESP32 */
 
 void rt_hw_spin_lock(rt_hw_spinlock_t *lock);
 void rt_hw_spin_unlock(rt_hw_spinlock_t *lock);

@@ -307,3 +307,9 @@ rt_thread_t rt_thread_idle_gethandler(void)
 
     return (rt_thread_t)(&idle[id]);
 }
+
+#if defined(RTT_ESP32)
+rt_thread_t rt_thread_idle_gethandler_by_id(int id) {
+    return (rt_thread_t)(&idle[id]);
+}
+#endif

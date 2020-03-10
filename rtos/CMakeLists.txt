@@ -19,10 +19,10 @@ list(APPEND srcs
     #"croutine.c"
     #"event_groups.c"
     "FreeRTOS-openocd.c"
-    "list.c"
+    #"list.c"
     #"queue.c"
-    "tasks.c"
-    "timers.c"
+    #"tasks.c"
+    #"timers.c"
 
     # rtt code
     "src/rtt_port.c"

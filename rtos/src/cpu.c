@@ -14,7 +14,7 @@
 #ifdef RT_USING_SMP
 
 static struct rt_cpu rt_cpus[RT_CPUS_NR];
-# ifdef ESP32
+# ifdef RTT_ESP32
 rt_hw_spinlock_t _cpus_lock = portMUX_INITIALIZER_UNLOCKED;
 # else
 rt_hw_spinlock_t _cpus_lock;

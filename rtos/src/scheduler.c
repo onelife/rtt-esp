@@ -34,7 +34,7 @@
 #include "include/rthw.h"
 
 #ifdef RT_USING_SMP
-# ifdef ESP32
+# ifdef RTT_ESP32
 rt_hw_spinlock_t _rt_critical_lock = portMUX_INITIALIZER_UNLOCKED;
 # else
 rt_hw_spinlock_t _rt_critical_lock;
@@ -289,7 +289,7 @@ void rt_system_scheduler_start(void)
 
 
 #ifdef RT_USING_SMP
-#ifndef ESP32
+#ifndef RTT_ESP32
 /**
  * This function will handle IPI interrupt and do a scheduling in system;
  * 

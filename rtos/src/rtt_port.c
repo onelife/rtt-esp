@@ -706,3 +706,58 @@ BaseType_t xPortSysTickHandler(void) {
     - rt_timer_check();
 */
 
+
+/* --- configUSE_NEWLIB_REENTRANT --- */
+
+#if (configUSE_NEWLIB_REENTRANT == 1)
+//Return global reent struct if FreeRTOS isn't running,
+struct _reent* __getreent(void) {
+    //No lock needed because if this changes, we won't be running anymore.
+    rt_thread_t self = rt_thread_self();
+    if (self == NULL) {
+        //No task running. Return global struct.
+        return _GLOBAL_REENT;
+    } else {
+        //We have a task; return its reentrant struct.
+        return &(self->newLib_reent);
+    }
+}
+#endif
+
+
+// rt_thread_t rt_thread_create(const char *name,
+//                              void (*entry)(void *parameter),
+//                              void       *parameter,
+//                              rt_uint32_t stack_size,
+//                              rt_uint8_t  priority,
+//                              rt_uint32_t tick)
+// rt_err_t rt_thread_control(rt_thread_t thread, int cmd, void *arg);
+// typedef void (*TaskFunction_t)( void * );
+BaseType_t xTaskCreatePinnedToCore(TaskFunction_t pxTaskCode,
+    const char * const pcName,
+    const uint32_t usStackDepth,
+    void * const pvParameters,
+    UBaseType_t uxPriority,
+    TaskHandle_t * const pxCreatedTask,
+    const BaseType_t xCoreID) {
+    // TODO: tick?
+    pxCreatedTask = rt_thread_create(
+        pcName, pxTaskCode, pvParameters, usStackDepth, uxPriority, 100);
+    return rt_thread_control(pxCreatedTask, RT_THREAD_CTRL_BIND_CPU, xCoreID);
+
+}
+
+unsigned rttSchedulerState = taskSCHEDULER_NOT_STARTED;
+
+BaseType_t xTaskGetSchedulerState(void) {
+    BaseType_t xReturn;
+    unsigned state;
+
+    if (rttSchedulerState == taskSCHEDULER_NOT_STARTED) {
+        return taskSCHEDULER_NOT_STARTED;
+    }
+    if (rt_thread_self()->scheduler_lock_nest == 0) {
+        return taskSCHEDULER_RUNNING;
+    }
+    return taskSCHEDULER_SUSPENDED;
+}

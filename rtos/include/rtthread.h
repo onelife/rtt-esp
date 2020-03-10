@@ -167,6 +167,9 @@ rt_err_t rt_thread_idle_delhook(void (*hook)(void));
 #endif
 void rt_thread_idle_excute(void);
 rt_thread_t rt_thread_idle_gethandler(void);
+#if defined(RTT_ESP32)
+rt_thread_t rt_thread_idle_gethandler_for_id(int id);
+#endif
 
 /*
  * schedule service
@@ -187,7 +190,7 @@ void rt_scheduler_sethook(void (*hook)(rt_thread_t from, rt_thread_t to));
 #endif
 
 #ifdef RT_USING_SMP
-#ifndef ESP32
+#ifndef RTT_ESP32
 void rt_scheduler_ipi_handler(int vector, void *param);
 #endif
 #endif

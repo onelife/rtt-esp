@@ -546,7 +546,7 @@ struct rt_cpu
  */
 struct rt_thread
 {
-#ifdef ESP32
+#ifdef RTT_ESP32
     volatile StackType_t *sp;
 #endif
     /* rt object */
@@ -562,7 +562,7 @@ struct rt_thread
     rt_list_t   tlist;                                  /**< the thread list */
 
     /* stack point and entry */
-#ifndef ESP32
+#ifndef RTT_ESP32
     void       *sp;                                     /**< stack point */
 #endif
     void       *entry;                                  /**< entry */
@@ -617,6 +617,10 @@ struct rt_thread
     /* light weight process if present */
 #ifdef RT_USING_LWP
     void        *lwp;
+#endif
+
+#if defined(RTT_ESP32) && (configUSE_NEWLIB_REENTRANT == 1)
+    struct _reent newLib_reent;                        /**< newlib support */
 #endif
 
     rt_uint32_t user_data;                             /**< private user data beyond this thread */
@@ -1068,7 +1072,7 @@ struct rt_device_rect_info
 #endif
 
 /* definitions for libc */
-#ifndef ESP32
+#ifndef RTT_ESP32
 # include "rtlibc.h"
 #endif
 

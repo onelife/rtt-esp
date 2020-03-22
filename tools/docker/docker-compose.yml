@@ -14,8 +14,8 @@ services:
       PYTHONPATH: /home/rtt
     volumes:
       - ../../:/home/rtt/rtt
-    devices:
-      - "/dev/ttyUSB0:/dev/ttyUSB0"
+    # devices:
+    #   - "/dev/ttyUSB0:/dev/ttyUSB0"
     entrypoint:
       - bash
     stdin_open: true

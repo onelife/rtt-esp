@@ -72,11 +72,11 @@ if(CONFIG_FREERTOS_DEBUG_OCDAWARE)
     target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--undefined=uxTopUsedPriority")
 endif()
 
-set_source_files_properties(
-    tasks.c
+#set_source_files_properties(
+    #tasks.c
     #event_groups.c
-    timers.c
-    queue.c
-    PROPERTIES COMPILE_DEFINITIONS
-    _ESP_FREERTOS_INTERNAL
-    )
+    #timers.c
+    #queue.c
+    #PROPERTIES COMPILE_DEFINITIONS
+    #_ESP_FREERTOS_INTERNAL
+    #)

@@ -309,7 +309,7 @@ void rt_scheduler_ipi_handler(int vector, void *param)
  * with the highest priority level in global ready queue or local ready queue, 
  * then switch to it.
  */
-void rt_schedule(void)
+void rt_schedule2(void) // change name temporarily
 {
     rt_base_t level;
     struct rt_thread *to_thread;
@@ -511,6 +511,7 @@ __exit:
  * to it.
  */
 #ifdef RT_USING_SMP
+#ifndef RTT_ESP32
 void rt_scheduler_do_irq_switch(void *context)
 {
     int cpu_id;
@@ -580,6 +581,7 @@ void rt_scheduler_do_irq_switch(void *context)
     }
     rt_hw_interrupt_enable(level);
 }
+#endif /*RTT_ESP32*/
 #endif /*RT_USING_SMP*/
 
 /*

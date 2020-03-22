@@ -168,7 +168,7 @@ rt_err_t rt_thread_idle_delhook(void (*hook)(void));
 void rt_thread_idle_excute(void);
 rt_thread_t rt_thread_idle_gethandler(void);
 #if defined(RTT_ESP32)
-rt_thread_t rt_thread_idle_gethandler_for_id(int id);
+rt_thread_t rt_thread_idle_gethandler_by_id(int id);
 #endif
 
 /*

@@ -2025,7 +2025,7 @@ static void prvAddNewTaskToReadyList( TCB_t *pxNewTCB, TaskFunction_t pxTaskCode
 
 #endif /* ( ( INCLUDE_xTaskResumeFromISR == 1 ) && ( INCLUDE_vTaskSuspend == 1 ) ) */
 /*-----------------------------------------------------------*/
-#if 0
+
 void vTaskStartScheduler( void )
 {
 BaseType_t xReturn;
@@ -2102,7 +2102,7 @@ BaseType_t i;
 	}
 }
 /*-----------------------------------------------------------*/
-#endif
+
 void vTaskEndScheduler( void )
 {
 	/* Stop the scheduler interrupts and call the portable scheduler end

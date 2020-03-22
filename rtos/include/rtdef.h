@@ -546,9 +546,6 @@ struct rt_cpu
  */
 struct rt_thread
 {
-#ifdef RTT_ESP32
-    volatile StackType_t *sp;
-#endif
     /* rt object */
     char        name[RT_NAME_MAX];                      /**< the name of thread */
     rt_uint8_t  type;                                   /**< type of object */
@@ -562,9 +559,8 @@ struct rt_thread
     rt_list_t   tlist;                                  /**< the thread list */
 
     /* stack point and entry */
-#ifndef RTT_ESP32
     void       *sp;                                     /**< stack point */
-#endif
+
     void       *entry;                                  /**< entry */
     void       *parameter;                              /**< parameter */
     void       *stack_addr;                             /**< stack address */

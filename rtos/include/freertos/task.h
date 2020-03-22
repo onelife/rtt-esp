@@ -67,7 +67,8 @@
     1 tab == 4 spaces!
 */
 
-
+#include "../rtt_port.h"
+#define INC_TASK_H
 #ifndef INC_TASK_H
 #define INC_TASK_H
 

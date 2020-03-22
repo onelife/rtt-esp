@@ -66,7 +66,8 @@
 
     1 tab == 4 spaces!
 */
-
+#include "../rtt_port.h"
+#define SEMAPHORE_H
 #ifndef SEMAPHORE_H
 #define SEMAPHORE_H
 
